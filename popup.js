@@ -73,6 +73,7 @@ Object.entries(PRESETS).forEach(([id, values]) => {
 });
 
 async function contentAlive() {
+  if (!tab || tab.id == null) return false;
   try {
     const r = await chrome.tabs.sendMessage(tab.id, { type: 'ping' });
     return !!(r && r.ok);
