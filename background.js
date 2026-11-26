@@ -305,13 +305,25 @@ function ensureAlarm() {
   chrome.alarms.create('wab-keepalive', { periodInMinutes: 0.5 });
 }
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === 'wab-keepalive' && state !== 'connected') {
-    // Clear any previous connection errors before retrying
+  // Only attempt to reconnect in the background if we have an active chat tab.
+  // If the user isn't using the bridge, we shouldn't spam the VS Code port.
+  if (a.name === 'wab-keepalive' && state !== 'connected' && tabs.size > 0) {
     lastError = '';
     connect();
   }
 });
-chrome.runtime.onInstalled.addListener(() => { ensureAlarm(); connect(); });
-chrome.runtime.onStartup.addListener(() => { ensureAlarm(); connect(); });
+chrome.runtime.onInstalled.addListener(() => { ensureAlarm(); });
+chrome.runtime.onStartup.addListener(() => { ensureAlarm(); });
 ensureAlarm();
-connect();
+
+// LAZY CONNECTION: Do not call connect() immediately on worker startup.
+// Calling connect() blindly causes Chrome to log ERR_CONNECTION_REFUSED in the
+// extensions page if VS Code is closed. We only connect when:
+// 1. A tab registers (calls 'register').
+// 2. The user clicks Connect in the popup.
+// 3. The keepalive alarm fires and we already have a token AND at least one active tab.
+chrome.storage.local.get(['token']).then((c) => {
+  if (c.token && tabs.size > 0) {
+    connect();
+  }
+});
