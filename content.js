@@ -333,7 +333,13 @@
       range.selectNodeContents(el);
       selection.removeAllRanges();
       selection.addRange(range);
-      document.execCommand('insertText', false, text);
+      try { document.execCommand('insertText', false, text); } catch (_) { /* deprecated: may be a no-op */ }
+      await sleep(80);
+      // execCommand is deprecated and silently does nothing on some React-controlled
+      // inputs / closed shadow roots. Verify the text actually landed before submitting.
+      if (!norm(readComposer(el)).includes(probe)) {
+        throw new Error('Could not type into the chat box (execCommand was ignored by this site). Copy the results manually or update the site adapter.');
+      }
     }
   }
 

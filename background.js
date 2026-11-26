@@ -90,7 +90,8 @@ let reconnectDelay = 500;
 function scheduleReconnect() {
   if (reconnectTimer) return;
   const c = getCfgCached();
-  if (c && c.token === '') return; // no token: nothing to do until the user pairs
+  if (!c || !c.token) return;        // no token cached yet: nothing to do until the user pairs
+  if (tabs.size === 0) return;       // no chat tab open: don't probe the port in the background
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     try {
@@ -291,13 +292,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.tabs.onRemoved.addListener((id) => {
   tabs.delete(id);
   if (activeTabId === id) activeTabId = null;
+  if (tabs.size === 0) disconnect(); // stop background reconnect attempts when no chat tabs remain
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.port || changes.token) {
     disconnect();
-    connect();
+    // Only reconnect immediately if a chat tab is open; otherwise stay lazy.
+    if (tabs.size > 0) connect();
   }
 });
 
