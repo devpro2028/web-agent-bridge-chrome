@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span id="dot" class="dot"></span>
+    <div>
+      <div class="title">Web Agent Bridge</div>
+      <div id="status" class="muted">Checking…</div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Connection</h2>
+    <div class="row">
+      <label for="port">Port</label>
+      <input id="port" type="number" min="1" max="65535">
+    </div>
+    <div class="row">
+      <label for="token">Token</label>
+      <input id="token" type="password" placeholder="Paste from the editor" autocomplete="off">
+    </div>
+    <div class="buttons">
+      <button id="connect" class="primary">Save &amp; connect</button>
+      <button id="disconnect">Disconnect</button>
+    </div>
+    <p class="hint">In VS Code / Antigravity / Cursor run <b>Web Agent Bridge: Copy Pairing Token</b>.</p>
+  </section>
+
+  <section>
+    <h2>This tab</h2>
+    <div id="tabinfo" class="muted">–</div>
+    <div class="buttons">
+      <button id="useTab">Use as agent tab</button>
+      <button id="inject">Enable on this site</button>
+    </div>
+    <div class="buttons">
+      <button id="prompt">Insert protocol prompt</button>
+      <button id="promptSend">Insert &amp; send</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Behaviour</h2>
+    <label class="check"><input type="checkbox" id="enabled"> Bridge enabled on chat pages</label>
+    <label class="check"><input type="checkbox" id="autoRun"> Run tool blocks automatically</label>
+    <label class="check"><input type="checkbox" id="autoSubmit"> Send results back automatically</label>
+    <label class="check"><input type="checkbox" id="showPanel"> Show status pill on chat pages</label>
+    <label class="check"><input type="checkbox" id="focusChatTab"> Focus chat tab when editor sends</label>
+  </section>
+
+  <section>
+    <h2>Response gap &amp; timing</h2>
+    <div class="row"><label for="responseGapMs" title="Reply must stay unchanged (and not streaming) this long before it is treated as finished">Response gap (ms)</label><input id="responseGapMs" type="number" min="200" step="100"></div>
+    <div class="row"><label for="minSendDelayMs" title="Random wait before results are sent back — lower bound">Send delay min (ms)</label><input id="minSendDelayMs" type="number" min="0" step="100"></div>
+    <div class="row"><label for="maxSendDelayMs" title="Random wait before results are sent back — upper bound">Send delay max (ms)</label><input id="maxSendDelayMs" type="number" min="0" step="100"></div>
+    <div class="row"><label for="betweenToolsMs" title="Pause between consecutive tool calls">Between tools (ms)</label><input id="betweenToolsMs" type="number" min="0" step="50"></div>
+    <div class="row"><label for="pollMs" title="How often the page is checked">Poll interval (ms)</label><input id="pollMs" type="number" min="150" step="50"></div>
+    <div class="row"><label for="maxAutoTurns" title="Stop auto-replying after this many automatic turns in a row">Max auto turns</label><input id="maxAutoTurns" type="number" min="1" step="1"></div>
+    <div class="row"><label for="toolTimeoutMs" title="How long to wait for the editor (covers manual Apply/Reject)">Tool timeout (ms)</label><input id="toolTimeoutMs" type="number" min="5000" step="1000"></div>
+    <div class="buttons">
+      <button id="presetFast">Fast</button>
+      <button id="presetNormal">Normal</button>
+      <button id="presetSlow">Slow</button>
+    </div>
+  </section>
+
+  <footer id="msg" class="muted"></footer>
+  <script src="defaults.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

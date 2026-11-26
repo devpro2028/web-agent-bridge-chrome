@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "Web Agent Bridge",
+  "description": "Connects browser AI chats (ChatGPT, Claude, Gemini, DeepSeek, Perplexity, Grok, Copilot, Mistral, Poe, ...) to your editor workspace.",
+  "version": "1.0.1",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "tabs",
+    "alarms",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Web Agent Bridge",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://aistudio.google.com/*",
+        "https://chat.deepseek.com/*",
+        "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
+        "https://grok.com/*",
+        "https://x.com/i/grok*",
+        "https://copilot.microsoft.com/*",
+        "https://chat.mistral.ai/*",
+        "https://poe.com/*",
+        "https://chat.qwen.ai/*",
+        "https://www.kimi.com/*",
+        "https://kimi.com/*",
+        "https://chat.z.ai/*",
+        "https://huggingface.co/chat/*",
+        "https://openrouter.ai/*",
+        "https://lmarena.ai/*",
+        "https://www.meta.ai/*",
+        "https://you.com/*",
+        "https://www.phind.com/*",
+        "https://chat.minimax.io/*",
+        "https://v0.dev/*",
+        "https://v0.app/*"
+      ],
+      "js": [
+        "defaults.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
