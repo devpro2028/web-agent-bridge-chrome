@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Web Agent Bridge",
   "description": "Connects browser AI chats (ChatGPT, Claude, Gemini, DeepSeek, Perplexity, Grok, Copilot, Mistral, Poe, ...) to your editor workspace.",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
