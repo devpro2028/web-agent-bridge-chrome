@@ -39,7 +39,7 @@ Other chat sites: open the site → extension icon → **Enable on this site**.
 
 ## Update
 
-Download the ZIP again, replace the files in your folder, then click **↻ reload** on the extension card in `chrome://extensions`. Your token and settings are kept.
+This repository is updated automatically with every release. To update, download the ZIP again, replace the files in your folder, then click **↻ reload** on the extension card in `chrome://extensions`. Your token and settings are kept.
 
 ## Settings
 
