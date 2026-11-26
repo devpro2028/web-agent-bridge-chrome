@@ -4,8 +4,10 @@
  * through the background worker, and types the results back into the chat.
  */
 (() => {
-  if (globalThis.__wabLoaded) return;
-  globalThis.__wabLoaded = true;
+    if (globalThis.__wabLoaded) return;
+    globalThis.__wabLoaded = true;
+    // If a previous instance was torn down by a context invalidation, clear the guard so a fresh inject can load.
+    if (globalThis.__wabDead) { globalThis.__wabLoaded = false; return; }
 
   const D = globalThis.WAB_DEFAULTS || {};
   const MARKER = '@@webagent';
@@ -417,6 +419,7 @@
         try {
           r = await chrome.runtime.sendMessage({ type: 'tool', tool: c.tool, args: c.args, content: c.content, site: SITE.id });
         } catch (e) {
+          if (isContextInvalid(e)) { die(e && e.message); return; }
           r = { ok: false, output: 'Extension was reloaded — refresh this page.' };
         }
         results.push({ c, r });
@@ -559,10 +562,44 @@
     };
     panel.els.run.onclick = () => { const p = st.pending; st.pending = []; runCalls(p); };
     panel.els.stop.onclick = () => { st.aborted = true; st.armed = false; setStatus('Stopped'); };
-    panel.els.auto.onclick = () => chrome.storage.local.set({ autoRun: !cfg.autoRun, autoSubmit: !cfg.autoRun });
-    panel.els.x.onclick = () => chrome.storage.local.set({ showPanel: false });
+    panel.els.auto.onclick = () => safeStorageSet({ autoRun: !cfg.autoRun, autoSubmit: !cfg.autoRun });
+    panel.els.x.onclick = () => safeStorageSet({ showPanel: false });
     document.documentElement.appendChild(h);
     panel.host = h;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Context-loss guard. After the extension is reloaded/updated/disabled,
+  // every chrome.* call from this (now orphaned) content script throws
+  // "Extension context invalidated". Detect it once and stop cleanly instead
+  // of letting uncaught errors pile up in the page console.
+  // ---------------------------------------------------------------------------
+  let alive = true;
+  function isContextInvalid(err) {
+    const s = String((err && err.message) || err || '');
+    return s.includes('Extension context invalidated') ||
+           s.includes('message port closed') ||
+           s.includes('Receiving end does not exist');
+  }
+  function die(reason) {
+    if (!alive) return;
+    alive = false;
+    st.aborted = true;
+    try { removePanel(); } catch (_) { /* ignore */ }
+    console.info(`[Web Agent Bridge] stopping: ${reason || 'extension context lost'}. Reload the page to reconnect.`);
+  }
+  // Safe wrapper: resolves to {ok:false} instead of throwing when the context is gone.
+  async function safeChrome(fn) {
+    if (!alive) return { ok: false, error: 'context invalidated' };
+    try {
+      return await fn();
+    } catch (e) {
+      if (isContextInvalid(e)) die(e && e.message);
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+  }
+  function safeStorageSet(obj) {
+    return safeChrome(() => chrome.storage.local.set(obj));
   }
 
   function removePanel() {
@@ -600,58 +637,72 @@
     renderPanel();
   }
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.type === 'status') {
-      applyStatus(msg);
+  try {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (!alive) return false;
+      if (msg.type === 'status') {
+        applyStatus(msg);
+        return false;
+      }
+      if (msg.type === 'send_to_chat') {
+        sendToChat(msg.text, msg.autoSubmit)
+          .then(() => { if (msg.autoSubmit) st.autoTurns = 0; sendResponse({ ok: true }); })
+          .catch((e) => {
+            if (isContextInvalid(e)) die(e && e.message);
+            sendResponse({ ok: false, error: e.message });
+          });
+        return true;
+      }
+      if (msg.type === 'insert_prompt') {
+        safeChrome(() => chrome.runtime.sendMessage({ type: 'get_prompt' })).then(async (r) => {
+          if (!r || !r.ok) return sendResponse({ ok: false, error: (r && r.error) || 'No prompt available' });
+          try {
+            await sendToChat(r.prompt, !!msg.submit);
+            sendResponse({ ok: true });
+          } catch (e) {
+            if (isContextInvalid(e)) die(e && e.message);
+            sendResponse({ ok: false, error: e.message });
+          }
+        });
+        return true;
+      }
+      if (msg.type === 'ping') {
+        sendResponse({ ok: true, site: SITE.id });
+        return false;
+      }
       return false;
-    }
-    if (msg.type === 'send_to_chat') {
-      sendToChat(msg.text, msg.autoSubmit)
-        .then(() => { if (msg.autoSubmit) st.autoTurns = 0; sendResponse({ ok: true }); })
-        .catch((e) => sendResponse({ ok: false, error: e.message }));
-      return true;
-    }
-    if (msg.type === 'insert_prompt') {
-      chrome.runtime.sendMessage({ type: 'get_prompt' }).then(async (r) => {
-        if (!r || !r.ok) return sendResponse({ ok: false, error: (r && r.error) || 'No prompt available' });
-        try {
-          await sendToChat(r.prompt, !!msg.submit);
-          sendResponse({ ok: true });
-        } catch (e) {
-          sendResponse({ ok: false, error: e.message });
-        }
-      });
-      return true;
-    }
-    if (msg.type === 'ping') {
-      sendResponse({ ok: true, site: SITE.id });
-      return false;
-    }
-    return false;
-  });
+    });
+  } catch (e) {
+    // Listener could not be registered because the context is already gone.
+    if (isContextInvalid(e)) die(e && e.message);
+  }
 
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    for (const k of Object.keys(changes)) if (k in D) cfg[k] = changes[k].newValue;
-    if (changes.pollMs) restartLoop();
-    renderPanel();
-  });
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (!alive || area !== 'local') return;
+      for (const k of Object.keys(changes)) if (k in D) cfg[k] = changes[k].newValue;
+      if (changes.pollMs) restartLoop();
+      renderPanel();
+    });
+  } catch (e) {
+    if (isContextInvalid(e)) die(e && e.message);
+  }
 
   function register() {
-    chrome.runtime.sendMessage({ type: 'register', site: SITE.id, focused: document.hasFocus() })
-      .then(applyStatus)
-      .catch(() => {});
+    safeChrome(() => chrome.runtime.sendMessage({ type: 'register', site: SITE.id, focused: document.hasFocus() }))
+      .then((s) => { if (s && s.ok !== false) applyStatus(s); });
   }
-  window.addEventListener('focus', () => chrome.runtime.sendMessage({ type: 'focus' }).catch(() => {}));
+  window.addEventListener('focus', () => { safeChrome(() => chrome.runtime.sendMessage({ type: 'focus' })); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) register(); });
 
   let loop = null;
   function restartLoop() {
     clearInterval(loop);
-    loop = setInterval(tick, Math.max(150, Number(cfg.pollMs) || 400));
+    loop = setInterval(() => { if (alive) tick(); }, Math.max(150, Number(cfg.pollMs) || 400));
   }
 
-  chrome.storage.local.get(D).then((c) => {
+  safeChrome(() => chrome.storage.local.get(D)).then((c) => {
+    if (!alive || !c || c.ok === false) return;
     cfg = { ...D, ...c };
     register();
     tick(); // baseline existing replies immediately

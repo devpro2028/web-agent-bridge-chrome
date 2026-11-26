@@ -29,8 +29,9 @@ function wsSend(obj) {
 }
 
 async function connect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
-  const c = await getCfg();
+  const c = await refreshCfg();
   if (!c.token) {
     state = 'no-token';
     lastError = 'Paste the pairing token from the editor (command: "Web Agent Bridge: Copy Pairing Token").';
@@ -51,6 +52,7 @@ async function connect() {
     if (ws !== sock) return;
     state = 'connected';
     lastError = '';
+    reconnectDelay = 500; // reset backoff after a successful connection
     wsSend({ type: 'hello', client: 'chrome', version: VERSION });
     clearInterval(pingTimer);
     // Regular traffic also keeps the MV3 service worker alive (Chrome 116+).
@@ -76,10 +78,40 @@ async function connect() {
       pending.delete(id);
     }
     broadcastStatus();
+    scheduleReconnect();
   };
 }
 
+// Exponential backoff (0.5s → 1s → 2s → ... capped at 30s) so we reconnect
+// quickly once the editor comes up, without spamming the console with
+// ERR_CONNECTION_REFUSED while it is down.
+let reconnectTimer = null;
+let reconnectDelay = 500;
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  const c = getCfgCached();
+  if (c && c.token === '') return; // no token: nothing to do until the user pairs
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    try {
+      await connect();
+    } catch (_) { /* ignore */ }
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  }, reconnectDelay);
+}
+function getCfgCached() {
+  // cheap synchronous view of the last known config; connect() re-reads it anyway
+  return lastCfg;
+}
+let lastCfg = null;
+async function refreshCfg() {
+  lastCfg = await chrome.storage.local.get(D);
+  return lastCfg;
+}
+
 function disconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  reconnectDelay = 500;
   if (ws) {
     const s = ws;
     ws = null;
@@ -273,7 +305,11 @@ function ensureAlarm() {
   chrome.alarms.create('wab-keepalive', { periodInMinutes: 0.5 });
 }
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === 'wab-keepalive' && state !== 'connected') connect();
+  if (a.name === 'wab-keepalive' && state !== 'connected') {
+    // Clear any previous connection errors before retrying
+    lastError = '';
+    connect();
+  }
 });
 chrome.runtime.onInstalled.addListener(() => { ensureAlarm(); connect(); });
 chrome.runtime.onStartup.addListener(() => { ensureAlarm(); connect(); });
